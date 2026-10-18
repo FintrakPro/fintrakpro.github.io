@@ -489,6 +489,6 @@ async function init(){
  render();
  try{const{data:{session}}=await sb.auth.getSession();await new Promise(r=>setTimeout(r,60));if(RECOVERY){AV='newpw';render()}else if(session)await enter(session.user);else{AV='login';render()}}catch(e){AV='login';ERR='Could not reach the server. '+errMsg(e);render()}
 }
-init();
+document.addEventListener('DOMContentLoaded',init);
 
-</script></body></html>
+</script><script src="funds.js"></script></body></html>
