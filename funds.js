@@ -11,7 +11,7 @@ DEF.cats=['FOOD & GROCERIES','TRANSPORTATION','UTILITIES','BILLS','SHOPPING','HE
 var MSG='',CF='';
 var SUGG=['EMERGENCY FUND','SAVINGS FUND','LIQUID FUND','INVESTMENT FUND','VACATION FUND','EDUCATION FUND','INSURANCE FUND','RETIREMENT FUND','BILLS FUND','WANTS FUND'];
 var U=function(s){return String(s==null?'':s).trim().replace(/\s+/g,' ').toUpperCase()};
-var fix=function(){var c=S.cfg;c.accounts=c.accounts||{};c.credits=c.credits||[];c.cats=c.cats||[];S.goals=S.goals||{}};
+var fix=function(){var c=S.cfg;c.accounts=c.accounts||{};c.credits=c.credits||[];c.cats=c.cats||[];c.installments=c.installments||[];S.goals=S.goals||{}};
 var cnt=function(n){return S.tx.filter(function(x){return x.source===n||x.dest===n}).length};
 var names=function(){return Object.keys(S.cfg.accounts).concat(S.cfg.credits,S.cfg.cats)};
 var taken=function(n){return names().indexOf(n)>=0};
@@ -28,6 +28,10 @@ function nameCell(k,n){return '<input data-fxk="'+k+'" data-fxo="'+A(n)+'" value
 function simpleTable(k,list,pfx,kind,empty){
  return '<div class="tw"><table class="wide" style="min-width:420px"><tr><th>Name</th><th class="n">Entries</th><th></th></tr>'+
   (list.map(function(n){return '<tr><td>'+nameCell(k,n)+'</td><td class="n">'+cnt(n)+'</td><td>'+delBtn(kind,n,pfx)+'</td></tr>'}).join('')||'<tr><td colspan="3" class="k">'+empty+'</td></tr>')+'</table></div>'}
+
+function creditTable(){var L=S.cfg.credits,I=S.cfg.installments;
+ return '<div class="tw"><table class="wide" style="min-width:520px"><tr><th>Name</th><th>Installment loan?</th><th class="n">Entries</th><th></th></tr>'+
+  (L.map(function(n){return '<tr><td>'+nameCell('crname',n)+'</td><td><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-fxk="inst" data-fxo="'+A(n)+'"'+(I.indexOf(n)>=0?' checked':'')+'> Show every unpaid installment</label></td><td class="n">'+cnt(n)+'</td><td>'+delBtn('delcr',n,'c')+'</td></tr>'}).join('')||'<tr><td colspan="4" class="k">None yet.</td></tr>')+'</table></div>'}
 
 window.sett=function(){
  fix();
@@ -52,8 +56,8 @@ window.sett=function(){
  '<div class="c"><h3>My Accounts (cash, banks, e-wallets)</h3><div class="k" style="margin-bottom:8px">Type a new name to rename an account — your past entries update automatically. Pick which fund each account belongs to. An account can be removed only when no entries use it.</div>'+
   '<div class="tw"><table class="wide" style="min-width:640px"><tr><th>Account</th><th>Fund</th><th class="n">Balance</th><th class="n">Entries</th><th></th></tr>'+accRows+'</table></div>'+
   '<form id="fx-acc" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><input name="n" placeholder="New account name (e.g. BDO Savings)" required style="flex:1;min-width:210px"><select name="fund" aria-label="Fund">'+fopts('')+'</select><button class="p" style="width:auto;padding:9px 18px">Add account</button></form></div>'+
- '<div class="c"><h3>My Credit / Loan accounts</h3><div class="k" style="margin-bottom:8px">Cards, loans and pay-later accounts you owe. Leave empty if you have none.</div>'+
-  simpleTable('crname',S.cfg.credits,'c','delcr','None yet.')+
+ '<div class="c"><h3>My Credit / Loan accounts</h3><div class="k" style="margin-bottom:8px">Cards, loans and pay-later accounts you owe. Leave empty if you have none. Tick <b>Installment loan</b> for loans where each SOA entry is one installment (for example Mega Peso): the SOA then lists every unpaid installment and applies your payments to the oldest one first. Leave it unticked for credit cards, where a new statement replaces the old one.</div>'+
+  creditTable()+
   '<form id="fx-cr" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><input name="n" placeholder="New creditor (e.g. BPI Credit Card)" required style="flex:1;min-width:210px"><button class="p" style="width:auto;padding:9px 18px">Add credit / loan</button></form></div>'+
  '<div class="c"><h3>My Expense categories</h3>'+
   simpleTable('catname',S.cfg.cats,'k','delcat','None yet.')+
@@ -63,6 +67,7 @@ window.sett=function(){
 document.addEventListener('change',function(e){
  var x=e.target,k=x.dataset&&x.dataset.fxk;if(!k)return;fix();
  var o=x.dataset.fxo,v=x.value,n;
+ if(k==='inst'){var I=S.cfg.installments,i=I.indexOf(o);if(x.checked&&i<0)I.push(o);if(!x.checked&&i>=0)I.splice(i,1);return done(x.checked?o+' now lists every unpaid installment in the SOA.':o+' now shows only its latest SOA entry.')}
  if(k==='accfund'){S.cfg.accounts[o]=v;return done('Fund updated.')}
  if(k==='fundgoal'){var g=+v;if(!v&&!(o in S.goals))return;if(!(g>0))return done('A goal must be more than 0.');S.goals[o]=g;return done('Goal saved.')}
  n=U(v);if(!n||n===o)return done();
@@ -72,7 +77,7 @@ document.addEventListener('change',function(e){
   return done('Fund renamed to '+n+'.')}
  if(taken(n))return done(n+' already exists in your accounts, credit/loans or categories.');
  if(k==='accname'){S.cfg.accounts=renameKey(S.cfg.accounts,o,n);renameTx(o,n);return done('Account renamed to '+n+'.')}
- if(k==='crname'){S.cfg.credits=S.cfg.credits.map(function(c){return c===o?n:c});renameTx(o,n);return done('Renamed to '+n+'.')}
+ if(k==='crname'){S.cfg.credits=S.cfg.credits.map(function(c){return c===o?n:c});S.cfg.installments=S.cfg.installments.map(function(c){return c===o?n:c});renameTx(o,n);return done('Renamed to '+n+'.')}
  if(k==='catname'){S.cfg.cats=S.cfg.cats.map(function(c){return c===o?n:c});renameTx(o,n);return done('Renamed to '+n+'.')}
 });
 
@@ -88,7 +93,7 @@ document.addEventListener('click',function(e){
   return done('Fund removed. Its accounts are now unassigned — pick a new fund for them.')}
  if(cnt(n))return done('Cannot remove '+n+': '+cnt(n)+' entries use it. Rename it instead, or delete those entries first.');
  if(a==='delacc'){if(Object.keys(S.cfg.accounts).length<=1)return done('Keep at least one account.');delete S.cfg.accounts[n];return done(n+' removed.')}
- if(a==='delcr'){S.cfg.credits=S.cfg.credits.filter(function(c){return c!==n});return done(n+' removed.')}
+ if(a==='delcr'){S.cfg.credits=S.cfg.credits.filter(function(c){return c!==n});S.cfg.installments=S.cfg.installments.filter(function(c){return c!==n});return done(n+' removed.')}
  if(a==='delcat'){if(S.cfg.cats.length<=1)return done('Keep at least one category.');S.cfg.cats=S.cfg.cats.filter(function(c){return c!==n});return done(n+' removed.')}
 });
 
@@ -104,4 +109,19 @@ document.addEventListener('submit',function(e){
  else if(f.id==='fx-cat')S.cfg.cats.push(n);
  done(n+' added.');
 });
+
+/* ---- SOA: installment loans list every unpaid installment; payments are applied oldest-first ---- */
+var isPay=function(t,c){return (t.type==='EXPENSES'||t.type==='TRANSFER')&&t.dest===c};
+var inst=function(c){return (S.cfg.installments||[]).indexOf(c)>=0};
+var key=function(e){return e.due||e.date};
+window.soaRows=function(){var last={},rows=[];
+ S.tx.forEach(function(x){if(x.type!=='SOA')return;if(inst(x.source))rows.push(x);else if(!last[x.source]||x.date>=last[x.source].date)last[x.source]=x});
+ return Object.keys(last).map(function(k){return last[k]}).concat(rows).sort(function(a,b){return (a.due||'')<(b.due||'')?-1:1})};
+function alloc(c){var ents=S.tx.filter(function(t){return t.type==='SOA'&&t.source===c}).sort(function(a,b){var x=key(a),y=key(b);return x<y?-1:x>y?1:(a.date<b.date?-1:1)});
+ var d0=ents.reduce(function(m,e){return e.date<m?e.date:m},'9999-99-99');
+ var pool=S.tx.filter(function(t){return isPay(t,c)&&t.date>=d0}).reduce(function(a,t){return a+ +t.amount},0),m=new Map();
+ ents.forEach(function(e,i){var p=i===ents.length-1?pool:Math.min(+e.amount,pool);if(p<0)p=0;m.set(e,p);pool-=p});return m}
+window.soaPaid=function(x){if(!inst(x.source))return S.tx.filter(function(t){return isPay(t,x.source)&&t.date>=x.date}).reduce(function(a,t){return a+ +t.amount},0);return alloc(x.source).get(x)||0};
+var RE=/S\.tx\.filter\(t=>\(t\.type===(['"])EXPENSES\1\|\|t\.type===\1TRANSFER\1\)&&t\.dest===x\.source&&t\.date>=x\.date\)\.reduce\(\(a,t\)=>a\+ \+t\.amount,0\)/;
+['rep2','soaDash','dash3','dash4'].forEach(function(nm){var f=window[nm];if(typeof f!=='function')return;var src=String(f),out=src.replace(RE,'soaPaid(x)');if(out!==src)(0,eval)(out)});
 })();
