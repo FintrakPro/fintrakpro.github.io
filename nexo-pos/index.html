@@ -1054,7 +1054,9 @@ function showReceipt(s){openModal(`<h2>${s.voided?'Voided sale':s.method==='Utan
 /* ---------- Receipt as picture / PDF / share ---------- */
 let DL=null,dlTried=false;
 async function getDL(){if(dlTried)return DL;dlTried=true;try{DL=window.claude&&typeof window.claude.use==='function'?await window.claude.use('downloads'):null}catch(e){DL=null}if(!DL)DL=LOCAL_DL;return DL}
-const LOCAL_DL={async save({filename,data}){const blob=data instanceof Blob?data:new Blob([data]);const a=document.createElement('a');const url=URL.createObjectURL(blob);a.href=url;a.download=filename;a.rel='noopener';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000)}};
+const IS_NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());const IS_DESKTOP_APP=/Electron/.test(navigator.userAgent);
+const blobB64=b=>new Promise((res,rej)=>{const r=new FileReader();r.onerror=rej;r.onload=()=>res(String(r.result).split(',')[1]);r.readAsDataURL(b)});
+const LOCAL_DL={async save({filename,data}){const blob=data instanceof Blob?data:new Blob([data]);if(IS_NATIVE){const P=window.Capacitor.Plugins;const b64=await blobB64(blob);let saved=false;try{await P.Filesystem.writeFile({path:'NEXO POS/'+filename,data:b64,directory:'DOCUMENTS',recursive:true});saved=true}catch(e){}try{const w=await P.Filesystem.writeFile({path:filename,data:b64,directory:'CACHE'});await P.Share.share({title:filename,files:[w.uri],dialogTitle:'Save or send '+filename})}catch(e){if(!saved)throw e}if(saved)toast('Saved in Documents › NEXO POS');return}const a=document.createElement('a');const url=URL.createObjectURL(blob);a.href=url;a.download=filename;a.rel='noopener';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000)}};
 function loadImg(src){return new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.onerror=()=>r(null);i.src=src})}
 async function receiptCanvas(s){try{await document.fonts.load('600 24px "IBM Plex Mono"')}catch(e){}
   const lines=receiptText(s).split('\n');const W=576,pad=40,lh=34,fs=24;let top=36;
@@ -1974,13 +1976,17 @@ document.addEventListener('keydown',e=>{
 
 const INSTALL={evt:null};
 const isStandalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
-function paintDL(){const b=document.getElementById('dlApp');if(b)b.hidden=isStandalone()}
+function paintDL(){const b=document.getElementById('dlApp');if(b)b.hidden=isStandalone()||IS_NATIVE||IS_DESKTOP_APP}
 function showDownload(){const ua=navigator.userAgent;const ios=/iPhone|iPad|iPod/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);const android=/Android/.test(ua);
   const step=(n,t)=>`<li style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none;width:28px;height:28px;border-radius:50%;background:var(--primary);color:#fff;display:grid;place-items:center;font-weight:700">${n}</span><span style="padding-top:3px">${t}</span></li>`;
   const how=ios?[step(1,'Tap the <b>Share</b> button at the bottom of Safari (the square with an arrow).'),step(2,'Scroll and tap <b>Add to Home Screen</b>.'),step(3,'Tap <b>Add</b>. NEXO POS appears on your home screen.')].join('')
     :android?[step(1,'Tap the menu <b>⋮</b> at the top right of Chrome.'),step(2,'Tap <b>Install app</b> or <b>Add to Home screen</b>.'),step(3,'Tap <b>Install</b>. NEXO POS appears with your apps.')].join('')
     :[step(1,'Click the <b>install icon</b> at the right end of the address bar in Chrome or Edge.'),step(2,'Click <b>Install</b>. NEXO POS opens in its own window and gets a desktop and Start menu shortcut.')].join('');
-  openModal(`<h2>Download NEXO POS</h2><p class="muted" style="margin:0">Free. Works without internet after the first open. Your data stays on your device.</p>
+  const big=(href,t,sub,cls='go')=>`<a class="btn ${cls} big" href="${href}" download style="text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:2px">${t}<span style="font-family:var(--f-body);font-size:12.5px;font-weight:500;text-transform:none;letter-spacing:0">${sub}</span></a>`;
+  const files=ios?'':`<div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">${android?big('download/NEXO-POS.apk','Download for Android','APK file · open it to install'):big('download/NEXO-POS-Setup.exe','Download for Windows','Installer · .exe')+big('download/NEXO-POS.apk','Android APK','For a phone or tablet','')}</div>
+    <p class="muted" style="margin:0;font-size:13px">${android?'When the download finishes, open it. If asked, allow <b>Install unknown apps</b> for Chrome, then tap <b>Install</b>.':'Open the installer. If Windows shows “protected your PC”, click <b>More info → Run anyway</b>.'}</p>
+    <h3 style="margin:10px 0 0;font-size:15px">Or install from the browser</h3>`;
+  openModal(`<h2>Download NEXO POS</h2><p class="muted" style="margin:0">Free. Works without internet. Your data stays on your device.</p>${files}
     ${INSTALL.evt?'<button class="btn go big" data-act="installApp" style="margin-top:6px">Install now</button><p class="muted" style="margin:0;font-size:13px">If nothing happens, follow the steps below.</p>':''}
     <ol style="list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:12px">${how}</ol>
     ${ios&&!/Safari/.test(ua)||/CriOS|FxiOS/.test(ua)?'<p style="margin:0;color:var(--warn)">On iPhone, open this link in <b>Safari</b> to install.</p>':''}
@@ -1992,7 +1998,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();INSTALL.evt=e;paintDL();if(st.loaded&&st.view==='settings')renderAll(false)});
 window.addEventListener('appinstalled',()=>{INSTALL.evt=null;closeModal();paintDL();toast('NEXO POS installed')});
 paintDL();
-if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').catch(()=>{})})}
+if(!IS_NATIVE&&!IS_DESKTOP_APP&&'serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').catch(()=>{})})}
 Store.init();
 </script>
 
